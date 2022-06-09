@@ -1,4 +1,187 @@
-# Airbyte Specification
+# Airbyte Protocol
+
+## Goals
+The goal of the Airbyte Protocol is to describe a series of standard components and all the interactions between them in order to declare an ELT pipeline. All message passing across components can be fully serialized for inter-process communication.
+
+This document describes the protocol as it exists in its CURRENT form. Stay tuned for an RFC on how the protocol will evolve.
+
+The protocol has evolved over time. In places where the original name for a concept has been replaced, it will be connoted as follows: `<new word> (legacy: <old word>)`. 
+
+## Components
+Each component in the Protocol is called an Actor. An actor is an application that implements the interface described below. Each actor can be thought of as a distinct step in an ELT pipeline. Actors come in the following types: Source, Destination.
+
+The common interface across all components is:
+```
+spec() -> ConnectorSpecification
+check(Config) -> AirbyteConnectionStatus
+```
+
+The output of each method in this interface is wrapped in an `AirbyteMessage`. This struct is an envelope for the return value of any message in the described interface. See the section the [AirbyteMessage]() section below for more details. For the sake of brevity, these interface diagrams will elide these `AirbyteMessage`s.
+
+Additionally, all methods described in the protocol can emit `AirbyteLogMessage`s and `AirbyteTraceMessage`s. All subsequent method signatures will assume that any number of messages of these types (wrapped in the `AirbyteMessage`) may be emitted.
+
+## Methods
+Each method in the protocol has 3 parts:
+1. Inputs: these are the arguments passed to the method.
+2. Data Channel Egress (Outputs): all outputs from a method are via STDOUT. While some method signatures declare a single return value, in practice, any number of `AirbyteLogMessage`s and `AirbyteTraceMessage`s may be emitted. A component is responsible for closing STDOUT to declare that it is done.
+3. Data Channel Ingress: after a method begins running, data can be passed to it via STDIN. For example, records are passed to a Destination on STDIN so that it can load them into a data warehouse.
+
+Sources are a special case and do not have a Data Channel Ingress.
+
+## Common Commands
+### Spec
+The `spec` command allows a component to broadcast information about itself and how it can be configured.
+* Input:
+    1. none.
+* Output:
+    1. `spec` - a [ConnectorSpecification](https://github.com/airbytehq/airbyte/blob/922bfd08a9182443599b78dbb273d70cb9f63d30/airbyte-protocol/models/src/main/resources/airbyte_protocol/airbyte_protocol.yaml#L256-L306) wrapped in an `AirbyteMessage` of type `spec`.
+* The `connectionSpecification` of the `ConnectorSpecification` must be valid JsonSchema. This object describes the schema of the configuration needed to operate the component.
+    * e.g. If using a Postgres source, the `ConnectorSpecification` would specify that a `hostname`, `port`, and `password` are required in order for the connector to function.
+    * The UI reads the JsonSchema in this field in order to render the input fields for a user to fill in.
+    * This JsonSchema is also used to validate that the provided inputs are valid. e.g. If `port` is one of the fields and the JsonSchema in the `connectionSpecification` specifies that this field should be a number, if a user inputs "airbyte", they will receive an error. For connection specification, Airbyte adheres to JsonSchema validation rules.
+
+### Check
+The `check` command validates that, given a configuration, that the Actor is able to connect and access any resources that it needs in order to operate. e.g. Verify that the password in the config for a postgres database is valid. 
+
+* Input:
+    1. `config` - A configuration JSON object that has been validated using `ConnectorSpecification#connectionSpecification`.
+* Output:
+    1. `connectionStatus` - an [AirbyteConnectionStatus](https://github.com/airbytehq/airbyte/blob/922bfd08a9182443599b78dbb273d70cb9f63d30/airbyte-protocol/models/src/main/resources/airbyte_protocol/airbyte_protocol.yaml#L99-L112) wrapped in an `AirbyteMessage` of type `connection_status`.
+* The `check` command attempts to connect to the underlying data source in order to verify that the provided credentials are usable.
+    * e.g. If given the credentials, it can connect to the Postgres database, it will return a success response. If it fails (perhaps the password is incorrect), it will return a failed response and (when possible) a helpful error message.
+    
+## Source
+
+A source is an application that extracts data from an underlying resource. A source implements the following interface:
+
+```
+spec() -> ConnectorSpecification
+check(Config) -> AirbyteConnectionStatus
+discover(Config) -> AirbyteCatalog
+read(Config, ConfiguredAirbyteCatalog, State) -> Stream<AirbyteRecordMessage | AirbyteStateMessage>
+```
+
+`spec` and `check` are the same as the commands described in the [Common Commands](#common-commands) section.
+
+### Discover
+The `discover` method describes the structure of the data in the resource and which Airbyte configurations can be applied to that data.
+
+* Input:
+    1. `config` - A configuration JSON object that has been validated using the `ConnectorSpecification#connectionSpecification`.
+* Output:
+    1. `catalog` - an [AirbyteCatalog](https://github.com/airbytehq/airbyte/blob/922bfd08a9182443599b78dbb273d70cb9f63d30/airbyte-protocol/models/src/main/resources/airbyte_protocol/airbyte_protocol.yaml#L113-L123) wrapped in an `AirbyteMessage` of type `catalog`.
+* This command detects the _structure_ of the data in the data source.
+* An `AirbyteCatalog` describes the structure of data in a data source. It has a single field called `streams` that contains a list of `AirbyteStream`s. Each of these contain a `name` and `json_schema` field. The `json_schema` field accepts any valid JsonSchema and describes the structure of a stream. This data model is intentionally flexible. That can make it a little hard at first to mentally map onto your own data, so we provide some examples below:
+    * If we are using a data source that is a traditional relational database, each table in that database would map to an `AirbyteStream`. Each column in the table would be a key in the `properties` field of the `json_schema` field.
+        * e.g. If we have a table called `users` which had the columns `name` and `age` \(the age column is optional\) the `AirbyteCatalog` would look like this:
+
+          ```text
+            {
+              "streams": [
+                {
+                  "name": "users",
+                  "json_schema": {
+                    "type": "object",
+                    "required": ["name"],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "age": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ```
+    * If we are using a data source that wraps an API with multiple different resources \(e.g. `api/customers` and `api/products`\) each route would correspond to a stream. The JSON object returned by each route would be described in the `json_schema` field.
+        * e.g. In the case where the API has two endpoints `api/customers` and `api/products` and each returns a list of JSON objects, the `AirbyteCatalog` might look like this. \(Note: using the JSON schema standard for defining a stream allows us to describe nested objects. We are not constrained to a classic "table/columns" structure\)
+
+          ```text
+            {
+              "streams": [
+                {
+                  "name": "customers",
+                  "json_schema": {
+                    "type": "object",
+                    "required": ["name"],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "products",
+                  "json_schema": {
+                    "type": "object",
+                    "required": ["name", "features"],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "features": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["name", "productId"],
+                          "properties": {
+                            "name": { "type": "string" },
+                            "productId": { "type": "number" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ```
+
+**Note:** Stream and field names can be any UTF8 string. Destinations are responsible for cleaning these names to make them valid table and column names in their respective data stores.
+
+### Read
+The `read` extracts data from the underlying resource and emits it as `AirbyteRecordMessage`s. It also emits `AirbyteStateMessage`s to allow checkpointing replication.
+
+* Input:
+    1. `config` - A configuration JSON object that has been validated using the `ConnectorSpecification`.
+    2. `catalog` - A `ConfiguredAirbyteCatalog`. This `catalog` should be constructed from the `catalog` returned by the `discover` command. To convert an `AirbyteStream` to a `ConfiguredAirbyteStream` copy the `AirbyteStream` into the stream field of the `ConfiguredAirbyteStream`. Any additional configurations can be specified in the `ConfiguredAirbyteStream`. More details on how this is configured in the [catalog documentation](catalog.md). This catalog is be used in the `read` command to determine what data to replicate and how it should be replicated.
+    3. `state` - A JSON object. This object is only ever written or read by the source, so it is a JSON blob with whatever information is necessary to keep track of how much of the data source has already been read. This is important whenever we need to replicate data with Incremental sync modes such as [Incremental Append](connections/incremental-append.md) or [Incremental Deduped History](connections/incremental-deduped-history.md). Note that this is not currently based on the state of data existing on the destination side.
+* Output:
+    1. `message stream` - A stream of `AirbyteRecordMessage`s and `AirbyteStateMessage`s piped to stdout.
+* This command reads data from the underlying data source and converts it into `AirbyteRecordMessage`.
+* Outputting `AirbyteStateMessages` is optional. It can be used to track how much of the data source has been synced.
+* The connector ideally will only pull the data described in the `catalog` argument. It is permissible for the connector, however, to ignore the `catalog` and pull data from any stream it can find. If it follows this second behavior, the extra data will be pruned in the worker. We prefer the former behavior because it reduces the amount of data that is transferred and allows control over not sending sensitive data. There are some sources for which this is simply not possible.
+## Destination
+A destination receives data on the Data Channel Ingress and loads it into an underlying resource (e.g. data warehouse or database).
+
+It implements the following interface.
+```text
+spec() -> ConnectorSpecification
+check(Config) -> AirbyteConnectionStatus
+write(Config, AirbyteCatalog, Stream<AirbyteMessage>(stdin)) -> void
+```
+
+For the sake of brevity, we will not re-describe `spec` and `check`. They are exactly the same as those commands described for the Source.
+
+#### Write
+
+* Input:
+    1. `config` - A configuration JSON object that has been validated using the `ConnectorSpecification`.
+    2. `catalog` - An `AirbyteCatalog`. This `catalog` should be a subset of the `catalog` returned by the `discover` command. Any `AirbyteRecordMessages`s that the destination receives that do _not_ match the structure described in the `catalog` will fail.
+    3. `message stream` - \(this stream is consumed on stdin--it is not passed as an arg\). It will receive a stream of JSON-serialized `AirbyteMesssage`.
+* Output:
+    1. `AirbyteMessage`s of type `AirbyteStateMessage`. The destination connector should only output state messages if they were previously received as input on stdin. Outputting a state message indicates that all records which came before it have been successfully written to the destination.
+* The destination should read in the `AirbyteMessages` and write any that are of type `AirbyteRecordMessage` to the underlying data store.
+* The destination should fail if any of the messages it receives do not match the structure described in the `catalog`.
+# Miscellaneous
+## Logging
+Logs are helping for debugging a component. In order for a log emitted from a component be properly parsed it should be emitted as an `AirbyteLogMessage` wrapped in an `AirbyteMessage`.
+
+The Airbyte implementation of the protocol does attempt to parse any data emitted from a component as a log, even if it is not properly wrapped in an `AirbyteLogMessage`. It attempts to treat any returned line that is not JSON or that is JSON but is not an `AirbyteMessage` as a log. This an implementation choice outside the boundaries of the strict protocol. The downside of this approach is that metadata about the log that would be captured in the `AirbyteLogMessage` is lost.
 
 ## Key Takeaways
 
@@ -11,9 +194,9 @@
 
 #### Contents:
 
-1. [General information about the specification](airbyte-specification.md#general)
-2. [Connector primitives](airbyte-specification.md#primitives)
-3. [Details of the protocol to pass information between connectors](airbyte-specification.md#the-airbyte-protocol)
+1. [General information about the specification](airbyte-protocol.md#general)
+2. [Connector primitives](airbyte-protocol.md#primitives)
+3. [Details of the protocol to pass information between connectors](airbyte-protocol.md#the-airbyte-protocol)
 
 This document is focused on the interfaces and primitives around connectors. You can better understand how that fits into the bigger picture by checking out the [High-level View](high-level-view.md).
 

@@ -1135,7 +1135,7 @@ module.exports = {
         },
         {
           type: 'doc',
-          id: "understanding-airbyte/airbyte-specification",
+          id: "understanding-airbyte/airbyte-protocol",
         },
         {
           type: 'doc',
