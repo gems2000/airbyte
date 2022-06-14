@@ -47,7 +47,7 @@ Sources are a special case and do not have a Data Channel Ingress.
 Additional Invariants
 * All arguments passed to an Actor and all messages emitted from an Actor are serialized JSON.
 * All messages emitted from Actors must be wrapped in an `AirbyteMessage`([ref](#airbytemessage)) envelope.
-* Messages not wrapped in the `AirbyteMessage` will be ignored.
+* Messages not wrapped in the `AirbyteMessage` must be dropped (e.g. not be passed from Source to Destination).  However certain implementations of the Airbyte Protocol may choose to store and log unknown messages for debugging purposes.
 * Each message must be on its own line. Multiple messages _cannot_ be sent on the same line. The JSON objects cannot be serialized across multiple lines.
 
 ## Common Interface
