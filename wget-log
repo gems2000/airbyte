@@ -1,0 +1,11 @@
+--2022-06-14 02:46:16--  https://gradle.org/next-steps/?version=7.4.2
+Resolving gradle.org (gradle.org)... 104.18.191.9, 104.18.190.9, 2606:4700::6812:bf09, ...
+Connecting to gradle.org (gradle.org)|104.18.191.9|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: unspecified [text/html]
+Saving to: ‘index.html?version=7.4.2’
+
+index.html?version=7.4.2                               [<=>                                                                                                            ]       0  --.-KB/s               index.html?version=7.4.2                               [ <=>                                                                                                           ]  29.02K  --.-KB/s    in 0.002s  
+
+2022-06-14 02:46:16 (14.9 MB/s) - ‘index.html?version=7.4.2’ saved [29719]
+
