@@ -66,7 +66,7 @@ The `spec` command allows an actor to broadcast information about itself and how
 ```
 check(Config) -> AirbyteConnectionStatus
 ```
-The `check` command validates that, given a configuration, that the Actor is able to connect and access any resources that it needs in order to operate. e.g. Given some Postgres credentials, it determines whether it can connect to the Postgres database. If it can, it will return a success response. If it fails (perhaps the password is incorrect), it will return a failed response and (when possible) a helpful error message.
+The `check` command validates that, given a configuration, that the Actor is able to connect and access all resources that it needs in order to operate. e.g. Given some Postgres credentials, it determines whether it can connect to the Postgres database. If it can, it will return a success response. If it fails (perhaps the password is incorrect), it will return a failed response and (when possible) a helpful error message.  If an actor's `check` command succeeds, it is expected that all subsequent methods in the sync will also succeed. 
 
 #### Input:
 1. `config` - A configuration JSON object that has been validated using `ConnectorSpecification#connectionSpecification` (see [ActorSpecification](#actor-specification) for information on `connectionSpecification`).
