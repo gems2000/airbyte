@@ -1,7 +1,7 @@
 # Airbyte Protocol
 
 ## Goals
-The goal of the Airbyte Protocol is to describe a series of standard components and all the interactions between them in order to declare an ELT pipeline. All message passing across components can be fully serialized for inter-process communication.
+The Airbyte Protocol describes a series of standard components and all the interactions between them in order to declare an ELT pipeline. All message passing across components is done via serialized JSON messages for inter-process communication.
 
 This document describes the protocol as it exists in its CURRENT form. Stay tuned for an RFC on how the protocol will evolve.
 
