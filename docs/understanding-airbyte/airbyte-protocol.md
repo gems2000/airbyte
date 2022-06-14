@@ -88,7 +88,7 @@ read(Config, ConfiguredAirbyteCatalog, State) -> Stream<AirbyteRecordMessage | A
 `spec` and `check` are the same as the commands described in the [Common Commands](#common-interface) section.
 
 ### Discover
-The `discover` method detects and describes the _structure_ of the data in the data store and which Airbyte configurations can be applied to that data.
+The `discover` method detects and describes the _structure_ of the data in the data store and which Airbyte configurations can be applied to that data.  For example, given a Postges source and valid Config, `discover` would return a list of available tables as streams. 
 
 #### Input:
 1. `config` - A configuration JSON object that has been validated using `ConnectorSpecification#connectionSpecification` (see [ActorSpecification](#actor-specification) for information on `connectionSpecification`).
