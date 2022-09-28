@@ -2,13 +2,13 @@ import React from "react";
 import { FormattedMessage } from "react-intl";
 import styled from "styled-components";
 
-import ImageBlock from "components/ImageBlock";
+import { ImageBlock } from "components/ui/ImageBlock";
 
 interface IProps {
-  values: {
+  values: Array<{
     name: string;
     connector: string;
-  }[];
+  }>;
   enabled?: boolean;
   entity: "source" | "destination";
 }
@@ -34,7 +34,7 @@ const ConnectEntitiesCell: React.FC<IProps> = ({ values, enabled, entity }) => {
   if (values.length === 1) {
     return (
       <Content enabled={enabled}>
-        <Image small />
+        <Image num={1} />
         <div>
           {values[0].name}
           <Connector>{values[0].connector}</Connector>

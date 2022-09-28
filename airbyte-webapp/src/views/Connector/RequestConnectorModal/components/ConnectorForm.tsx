@@ -4,9 +4,10 @@ import { FormattedMessage, useIntl } from "react-intl";
 import styled from "styled-components";
 import * as yup from "yup";
 
-import { Input, ControlLabels, DropDown, Button } from "components";
+import { Button, ControlLabels, DropDown, Input } from "components";
 
 import { Values } from "../types";
+import styles from "./ConnectorForm.module.scss";
 
 const Buttons = styled.div`
   width: 100%;
@@ -24,10 +25,6 @@ const ControlLabelsWithMargin = styled(ControlLabels)`
   margin-bottom: 29px;
 `;
 
-const RequestButton = styled(Button)`
-  min-width: 105px;
-`;
-
 interface ConnectorFormProps {
   onSubmit: (values: Values) => void;
   onCancel: () => void;
@@ -43,7 +40,7 @@ const requestConnectorValidationSchema = yup.object().shape({
 });
 
 const ConnectorForm: React.FC<ConnectorFormProps> = ({ onSubmit, onCancel, currentValues, hasFeedback }) => {
-  const formatMessage = useIntl().formatMessage;
+  const { formatMessage } = useIntl();
   const dropdownData = [
     { value: "source", label: <FormattedMessage id="connector.source" /> },
     {
@@ -60,8 +57,8 @@ const ConnectorForm: React.FC<ConnectorFormProps> = ({ onSubmit, onCancel, curre
         additionalInfo: currentValues?.additionalInfo || "",
         email: currentValues?.email || "",
       }}
-      validateOnBlur={true}
-      validateOnChange={true}
+      validateOnBlur
+      validateOnChange
       validationSchema={requestConnectorValidationSchema}
       onSubmit={onSubmit}
     >
@@ -100,7 +97,7 @@ const ConnectorForm: React.FC<ConnectorFormProps> = ({ onSubmit, onCancel, curre
                   )
                 }
               >
-                <Input {...field} autoFocus error={!!meta.error && meta.touched} type="text" />
+                <Input {...field} error={!!meta.error && meta.touched} type="text" />
               </ControlLabelsWithMargin>
             )}
           </Field>
@@ -136,16 +133,16 @@ const ConnectorForm: React.FC<ConnectorFormProps> = ({ onSubmit, onCancel, curre
             </Field>
           )}
           <Buttons>
-            <Button type="button" secondary onClick={onCancel} disabled={hasFeedback}>
+            <Button type="button" variant="secondary" onClick={onCancel} disabled={hasFeedback}>
               <FormattedMessage id="form.cancel" />
             </Button>
-            <RequestButton type="submit" wasActive={hasFeedback}>
+            <Button className={styles.requestButton} type="submit" wasActive={hasFeedback}>
               {hasFeedback ? (
                 <FormattedMessage id="connector.requested" />
               ) : (
                 <FormattedMessage id="connector.request" />
               )}
-            </RequestButton>
+            </Button>
           </Buttons>
         </Form>
       )}

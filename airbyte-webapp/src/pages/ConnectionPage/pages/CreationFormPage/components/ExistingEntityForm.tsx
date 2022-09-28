@@ -6,13 +6,14 @@ import * as yup from "yup";
 
 import { Button, ControlLabels, DropDown } from "components";
 import { ConnectorIcon } from "components/ConnectorIcon";
-import ContentCard from "components/ContentCard";
+import { Card } from "components/ui/Card";
 
 import { useDestinationDefinitionList } from "services/connector/DestinationDefinitionService";
 import { useSourceDefinitionList } from "services/connector/SourceDefinitionService";
 
 import { useDestinationList } from "../../../../../hooks/services/useDestinationHook";
 import { useSourceList } from "../../../../../hooks/services/useSourceHook";
+import styles from "./ExistingEntityForm.module.scss";
 
 interface IProps {
   type: "source" | "destination";
@@ -41,7 +42,7 @@ const existingEntityValidationSchema = yup.object().shape({
 });
 
 const ExistingEntityForm: React.FC<IProps> = ({ type, onSubmit }) => {
-  const formatMessage = useIntl().formatMessage;
+  const { formatMessage } = useIntl();
   const { sources } = useSourceList();
   const { sourceDefinitions } = useSourceDefinitionList();
 
@@ -59,18 +60,18 @@ const ExistingEntityForm: React.FC<IProps> = ({ type, onSubmit }) => {
           img: <ConnectorIcon icon={sourceDef?.icon} />,
         };
       });
-    } else {
-      return destinations.map((item) => {
-        const destinationDef = destinationDefinitions.find(
-          (dd) => dd.destinationDefinitionId === item.destinationDefinitionId
-        );
-        return {
-          label: item.name,
-          value: item.destinationId,
-          img: <ConnectorIcon icon={destinationDef?.icon} />,
-        };
-      });
     }
+    return destinations.map((item) => {
+      const destinationDef = destinationDefinitions.find(
+        (dd) => dd.destinationDefinitionId === item.destinationDefinitionId
+      );
+      return {
+        label: item.name,
+        value: item.destinationId,
+        img: <ConnectorIcon icon={destinationDef?.icon} />,
+      };
+    });
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type]);
 
@@ -81,7 +82,7 @@ const ExistingEntityForm: React.FC<IProps> = ({ type, onSubmit }) => {
   const initialValues = { entityId: "" };
   return (
     <>
-      <ContentCard title={<FormattedMessage id={`connectionForm.${type}Existing`} />}>
+      <Card title={<FormattedMessage id={`connectionForm.${type}Existing`} />}>
         <Formik
           initialValues={initialValues}
           validationSchema={existingEntityValidationSchema}
@@ -110,14 +111,14 @@ const ExistingEntityForm: React.FC<IProps> = ({ type, onSubmit }) => {
                 )}
               </Field>
               <BottomBlock>
-                <Button disabled={isSubmitting} type="submit">
+                <Button className={styles.submitButton} disabled={isSubmitting} type="submit">
                   <FormattedMessage id={`connectionForm.${type}Use`} />
                 </Button>
               </BottomBlock>
             </FormContent>
           )}
         </Formik>
-      </ContentCard>
+      </Card>
       <PaddingBlock>
         <FormattedMessage id="onboarding.or" />
       </PaddingBlock>

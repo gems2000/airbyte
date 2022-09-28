@@ -5,32 +5,45 @@
 package io.airbyte.workers.temporal.scheduling.activities;
 
 import io.airbyte.commons.json.Jsons;
+import io.airbyte.commons.temporal.TemporalWorkflowUtils;
+import io.airbyte.config.JobConfig.ConfigType;
 import io.airbyte.config.JobResetConnectionConfig;
 import io.airbyte.config.JobSyncConfig;
 import io.airbyte.config.ResetSourceConfiguration;
 import io.airbyte.config.StandardSyncInput;
-import io.airbyte.scheduler.models.IntegrationLauncherConfig;
-import io.airbyte.scheduler.models.Job;
-import io.airbyte.scheduler.models.JobRunConfig;
-import io.airbyte.scheduler.persistence.JobPersistence;
+import io.airbyte.persistence.job.JobPersistence;
+import io.airbyte.persistence.job.models.IntegrationLauncherConfig;
+import io.airbyte.persistence.job.models.Job;
+import io.airbyte.persistence.job.models.JobRunConfig;
 import io.airbyte.workers.WorkerConstants;
-import io.airbyte.workers.temporal.TemporalUtils;
+import io.airbyte.workers.config.WorkerMode;
 import io.airbyte.workers.temporal.exception.RetryableException;
-import lombok.AllArgsConstructor;
+import io.micronaut.context.annotation.Requires;
+import jakarta.inject.Singleton;
+import java.util.List;
 
-@AllArgsConstructor
+@Singleton
+@Requires(env = WorkerMode.CONTROL_PLANE)
 public class GenerateInputActivityImpl implements GenerateInputActivity {
 
-  private JobPersistence jobPersistence;
+  private final JobPersistence jobPersistence;
+
+  public GenerateInputActivityImpl(final JobPersistence jobPersistence) {
+    this.jobPersistence = jobPersistence;
+  }
 
   @Override
   public GeneratedJobInput getSyncWorkflowInput(final SyncInput input) {
     try {
       final long jobId = input.getJobId();
       final int attempt = input.getAttemptId();
+      final JobSyncConfig config;
+
       final Job job = jobPersistence.getJob(jobId);
-      JobSyncConfig config = job.getConfig().getSync();
-      if (input.isReset()) {
+      final ConfigType jobConfigType = job.getConfig().getConfigType();
+      if (ConfigType.SYNC.equals(jobConfigType)) {
+        config = job.getConfig().getSync();
+      } else if (ConfigType.RESET_CONNECTION.equals(jobConfigType)) {
         final JobResetConnectionConfig resetConnection = job.getConfig().getResetConnection();
         final ResetSourceConfiguration resetSourceConfiguration = resetConnection.getResetSourceConfiguration();
         config = new JobSyncConfig()
@@ -45,10 +58,17 @@ public class GenerateInputActivityImpl implements GenerateInputActivity {
             .withDestinationConfiguration(resetConnection.getDestinationConfiguration())
             .withConfiguredAirbyteCatalog(resetConnection.getConfiguredAirbyteCatalog())
             .withOperationSequence(resetConnection.getOperationSequence())
-            .withResourceRequirements(resetConnection.getResourceRequirements());
+            .withResourceRequirements(resetConnection.getResourceRequirements())
+            .withState(resetConnection.getState());
+      } else {
+        throw new IllegalStateException(
+            String.format("Unexpected config type %s for job %d. The only supported config types for this activity are (%s)",
+                jobConfigType,
+                jobId,
+                List.of(ConfigType.SYNC, ConfigType.RESET_CONNECTION)));
       }
 
-      final JobRunConfig jobRunConfig = TemporalUtils.createJobRunConfig(jobId, attempt);
+      final JobRunConfig jobRunConfig = TemporalWorkflowUtils.createJobRunConfig(jobId, attempt);
 
       final IntegrationLauncherConfig sourceLauncherConfig = new IntegrationLauncherConfig()
           .withJobId(String.valueOf(jobId))
@@ -84,8 +104,7 @@ public class GenerateInputActivityImpl implements GenerateInputActivity {
   public GeneratedJobInput getSyncWorkflowInputWithAttemptNumber(final SyncInputWithAttemptNumber input) {
     return getSyncWorkflowInput(new SyncInput(
         input.getAttemptNumber(),
-        input.getJobId(),
-        input.isReset()));
+        input.getJobId()));
   }
 
 }
